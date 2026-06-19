@@ -182,3 +182,7 @@ same `events` shape with rollups and lifecycle added.
 stripping and meta sanitization), the `/api/collect` route (single, batch, malformed body,
 and DNT/GPC handling, with the data layer mocked), and the sessions aggregation pipeline +
 summary mapping. Coverage is intentionally targeted, not exhaustive.
+
+## License
+
+[MIT](./LICENSE).
