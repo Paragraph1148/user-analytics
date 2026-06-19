@@ -1,26 +1,55 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Design tokens — Vercel design language (see DESIGN.md): monochrome precision on a
+ * near-white canvas, ink text, hairline dividers. These generate the utility classes
+ * the dashboard uses (bg-canvas, text-ink, border-hairline, …).
+ */
+@theme {
+  --color-canvas: #ffffff;
+  --color-canvas-soft: #fafafa;
+  --color-canvas-soft-2: #f5f5f5;
+
+  --color-ink: #171717;
+  --color-body: #4d4d4d;
+  --color-mute: #888888;
+
+  --color-hairline: #ebebeb;
+  --color-hairline-strong: #a1a1a1;
+
+  --color-link: #0070f3;
+
+  /* Semantic accents for behavioral signals — drawn from the brand palette, no new hues. */
+  --color-signal-rage: #ee0000;
+  --color-signal-dead: #f5a623;
+  --color-signal-cool: #0070f3;
 }
 
+/* Map the utility font namespaces to the Geist faces loaded by next/font in layout.tsx. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background: var(--color-canvas-soft);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+::selection {
+  background: #171717;
+  color: #f2f2f2;
+}
+
+/* Quality floor: respect reduced-motion globally; animation is used sparingly anyway. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

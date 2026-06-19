@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third-party agent-skill snapshots (synced docs, scripts) — not our source.
+    ".agents/**",
   ]),
 ]);
 

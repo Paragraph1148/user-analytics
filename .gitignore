@@ -32,9 +32,15 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
+
+# local agent tooling and the synced Tailwind docs snapshot (source-available — keep local).
+# skills-lock.json records how to re-sync it.
+.agents/
+.claude/
 
 # typescript
 *.tsbuildinfo

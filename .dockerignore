@@ -1,0 +1,20 @@
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+
+# Never bake secrets into the image — MONGODB_URI is provided at runtime.
+.env*
+
+# Local-only tooling and reference material.
+.agents
+.claude
+.mcp.json
+skills-lock.json
+test
+vitest.config.ts
+*.md
+!README.md
+Dockerfile
+.dockerignore
