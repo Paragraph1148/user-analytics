@@ -38,4 +38,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+# Force the bind address at invocation: some platforms (e.g. AWS App Runner) inject their
+# own HOSTNAME env var, which would otherwise override ENV above and make Next bind to a
+# single interface — failing health checks. Setting it inline here can't be overridden.
+CMD ["sh", "-c", "HOSTNAME=0.0.0.0 node server.js"]
