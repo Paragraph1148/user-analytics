@@ -40,6 +40,7 @@ export default function DemoPage() {
         <iframe
           src="/sample"
           title="Sample page with the analytics tracker"
+          allow="geolocation"
           className="h-[600px] w-full rounded-xl border border-hairline bg-canvas"
         />
         <p className="mt-2 text-xs text-mute">

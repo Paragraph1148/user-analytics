@@ -16,12 +16,72 @@ export interface SessionGeo extends Geo {
   source: "ip" | "precise";
 }
 
+/** High-entropy device profile — only collected under the device_profiling purpose. These
+ *  are device/browser characteristics (the kind /research demonstrates as fingerprinting),
+ *  here stored as first-party data with explicit consent — never hashed cross-site or
+ *  respawned. */
+export interface DeviceProfile {
+  ua?: string;
+  platform?: string;
+  platformVersion?: string;
+  arch?: string;
+  model?: string;
+  browser?: string;
+  mobile?: boolean;
+  screen?: string;
+  cores?: number;
+  memory?: number;
+  touch?: number;
+  languages?: string;
+  timezone?: string;
+  gpu?: string;
+  network?: string;
+  colorScheme?: string;
+  reducedMotion?: boolean;
+}
+
 export interface SessionDoc {
   _id: string; // sessionId
   firstSeen: Date;
   lastSeen: Date;
   consent: SessionConsent;
-  geo?: SessionGeo;
+  geo?: SessionGeo; // coarse, from IP
+  precise?: { lat: number; lng: number }; // from navigator.geolocation (precise_location)
+  device?: DeviceProfile; // from device_profiling
+}
+
+const DEVICE_STR_KEYS: Array<keyof DeviceProfile> = [
+  "ua", "platform", "platformVersion", "arch", "model", "browser",
+  "screen", "languages", "timezone", "gpu", "network", "colorScheme",
+];
+const DEVICE_NUM_KEYS: Array<keyof DeviceProfile> = ["cores", "memory", "touch"];
+const DEVICE_BOOL_KEYS: Array<keyof DeviceProfile> = ["mobile", "reducedMotion"];
+
+/** Keep only known device fields, bound strings, validate numbers — never trust the client. */
+export function sanitizeDevice(raw: unknown): DeviceProfile | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  const out: Record<string, string | number | boolean> = {};
+  for (const k of DEVICE_STR_KEYS) {
+    if (typeof r[k] === "string") out[k] = (r[k] as string).slice(0, 256);
+  }
+  for (const k of DEVICE_NUM_KEYS) {
+    if (typeof r[k] === "number" && Number.isFinite(r[k])) out[k] = r[k] as number;
+  }
+  for (const k of DEVICE_BOOL_KEYS) {
+    if (typeof r[k] === "boolean") out[k] = r[k] as boolean;
+  }
+  return Object.keys(out).length ? (out as DeviceProfile) : null;
+}
+
+/** Round coordinates to ~110m precision (data minimization), validating the input. */
+export function roundPrecise(raw: unknown): { lat: number; lng: number } | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as { lat?: unknown; lng?: unknown };
+  if (typeof r.lat !== "number" || typeof r.lng !== "number") return null;
+  if (!Number.isFinite(r.lat) || !Number.isFinite(r.lng)) return null;
+  if (Math.abs(r.lat) > 90 || Math.abs(r.lng) > 180) return null;
+  return { lat: Math.round(r.lat * 1000) / 1000, lng: Math.round(r.lng * 1000) / 1000 };
 }
 
 /** Upsert session-level state. Best-effort enrichment — callers don't fail ingest on error.
@@ -38,6 +98,32 @@ export async function upsertSession(
     { $set: set, $setOnInsert: { firstSeen: data.now } },
     { upsert: true },
   );
+}
+
+/** Attach Allow-all-tier attributes (device profile, precise location) to a session.
+ *  Only the fields passed are written; the session is normally created already by ingest. */
+export async function updateSessionAttributes(
+  sessionId: string,
+  data: {
+    device?: DeviceProfile | null;
+    precise?: { lat: number; lng: number } | null;
+    consent: SessionConsent;
+    now: Date;
+  },
+): Promise<boolean> {
+  const set: Record<string, unknown> = {};
+  if (data.device) set.device = data.device;
+  if (data.precise) set.precise = data.precise;
+  if (Object.keys(set).length === 0) return false;
+  set.lastSeen = data.now;
+
+  const db = await getDb();
+  await db.collection<SessionDoc>("sessions").updateOne(
+    { _id: sessionId },
+    { $set: set, $setOnInsert: { firstSeen: data.now, consent: data.consent } },
+    { upsert: true },
+  );
+  return true;
 }
 
 export async function getSession(sessionId: string): Promise<SessionDoc | null> {

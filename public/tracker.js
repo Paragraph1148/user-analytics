@@ -54,14 +54,87 @@
     return m ? decodeURIComponent(m[1]) : null;
   }
 
-  // ---- Consent: analytics permission from the first-party cf_consent cookie ----
-  function analyticsConsented() {
+  // ---- Consent: read the first-party cf_consent cookie ----
+  function readConsent() {
     try {
       var o = JSON.parse(getCookie(CONSENT_COOKIE));
-      return !!o && o.v === CONSENT_VERSION && o.a === true;
+      if (o && o.v === CONSENT_VERSION) return o;
+    } catch {}
+    return null;
+  }
+  function analyticsConsented() {
+    var c = readConsent();
+    return !!c && c.a === true;
+  }
+
+  // ---- Allow-all tier: device profile + precise location (each gated by its purpose) ----
+  function gpuRenderer() {
+    try {
+      var gl = document.createElement("canvas").getContext("webgl");
+      if (!gl) return undefined;
+      var ext = gl.getExtension("WEBGL_debug_renderer_info");
+      return ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : undefined;
     } catch {
-      return false;
+      return undefined;
     }
+  }
+
+  function collectDevice() {
+    var nav = navigator;
+    var conn = nav.connection || nav.mozConnection || nav.webkitConnection;
+    var dark = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches;
+    var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var d = {
+      ua: nav.userAgent,
+      platform: nav.platform,
+      languages: (nav.languages || [nav.language]).join(","),
+      timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone) || undefined,
+      screen: screen.width + "x" + screen.height + " @" + window.devicePixelRatio + "x " + screen.colorDepth + "-bit",
+      cores: nav.hardwareConcurrency,
+      memory: nav.deviceMemory,
+      touch: nav.maxTouchPoints,
+      gpu: gpuRenderer(),
+      network: conn ? conn.effectiveType + (conn.downlink ? " ~" + conn.downlink + "mbps" : "") : undefined,
+      colorScheme: dark ? "dark" : "light",
+      reducedMotion: !!reduce,
+    };
+    // UA-Client-Hints high-entropy values (Chromium); falls back to the base set elsewhere.
+    if (nav.userAgentData && nav.userAgentData.getHighEntropyValues) {
+      return nav.userAgentData
+        .getHighEntropyValues(["platform", "platformVersion", "architecture", "model", "fullVersionList", "mobile", "bitness"])
+        .then(function (hi) {
+          if (hi.platform) d.platform = hi.platform;
+          d.platformVersion = hi.platformVersion;
+          d.arch = hi.architecture;
+          d.model = hi.model;
+          d.mobile = hi.mobile;
+          var list = (hi.fullVersionList || []).filter(function (b) {
+            return !/Not.A.Brand/i.test(b.brand);
+          });
+          if (list[0]) d.browser = list[0].brand + " " + list[0].version;
+          return d;
+        })
+        .catch(function () {
+          return d;
+        });
+    }
+    return Promise.resolve(d);
+  }
+
+  function sendSession(extra) {
+    if (!sessionId) return;
+    var payload = { sessionId: sessionId };
+    for (var k in extra) {
+      if (Object.prototype.hasOwnProperty.call(extra, k)) payload[k] = extra[k];
+    }
+    try {
+      fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+      }).catch(function () {});
+    } catch {}
   }
 
   // ---- Session identity ----
@@ -287,6 +360,26 @@
     } catch {}
 
     enqueue("page_view", { referrer: document.referrer || "" });
+
+    // Allow-all tier: gather extra attributes for the purposes the user granted. The server
+    // re-checks consent and drops anything not permitted. Precise location falls back to the
+    // server's coarse IP geo automatically if the permission is denied or times out.
+    var consent = readConsent();
+    if (consent && consent.d) {
+      collectDevice().then(function (device) {
+        if (started) sendSession({ device: device });
+      });
+    }
+    if (consent && consent.l && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        function (pos) {
+          if (started) sendSession({ precise: { lat: pos.coords.latitude, lng: pos.coords.longitude } });
+        },
+        function () {}, // denied/failed: coarse IP geo (server-side) is the fallback
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 },
+      );
+    }
+
     document.addEventListener("click", onClick, true);
     window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);

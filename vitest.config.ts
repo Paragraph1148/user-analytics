@@ -13,7 +13,11 @@ export default defineConfig({
     include: ["test/**/*.test.ts"],
     environment: "node",
     // A dummy URI so lib/db's module-level guard passes. The MongoClient connects
-    // lazily, so nothing actually dials out during unit tests.
-    env: { MONGODB_URI: "mongodb://localhost:27017/test" },
+    // lazily, so nothing actually dials out during unit tests. GEOIP_DB_PATH points at a
+    // missing file so geo tests are deterministic regardless of any local GeoLite2 DB.
+    env: {
+      MONGODB_URI: "mongodb://localhost:27017/test",
+      GEOIP_DB_PATH: "/nonexistent/GeoLite2-City.mmdb",
+    },
   },
 });

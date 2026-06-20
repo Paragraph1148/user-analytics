@@ -45,13 +45,36 @@ export default async function SessionDetailPage({
   if (events.length === 0) notFound();
 
   const s = summarize(events);
-  const location = session?.geo?.country
+  const coarse = session?.geo?.country
     ? session.geo.country + (session.geo.region ? `-${session.geo.region}` : "")
-    : "Unknown";
+    : null;
+  const location = session?.precise
+    ? `${session.precise.lat}, ${session.precise.lng}`
+    : (coarse ?? "Unknown");
+  const device = session?.device;
+  const deviceRows: Array<[string, string]> = device
+    ? (
+        [
+          ["Browser", device.browser],
+          ["Platform", [device.platform, device.platformVersion].filter(Boolean).join(" ")],
+          ["Architecture", device.arch],
+          ["Model", device.model],
+          ["Mobile", device.mobile === undefined ? undefined : device.mobile ? "yes" : "no"],
+          ["Screen", device.screen],
+          ["CPU cores", device.cores?.toString()],
+          ["Memory", device.memory ? `${device.memory} GB` : undefined],
+          ["GPU", device.gpu],
+          ["Network", device.network],
+          ["Languages", device.languages],
+          ["Time zone", device.timezone],
+          ["Color scheme", device.colorScheme],
+        ] as Array<[string, string | undefined]>
+      ).filter((r): r is [string, string] => !!r[1])
+    : [];
   const stats: Array<[string, string]> = [
     ["Started", formatDateTime(s.startedAt)],
     ["Time on page", formatDuration(s.dwellMs)],
-    ["Location", location],
+    [session?.precise ? "Location (precise)" : "Location", location],
     ["Consent", session?.consent?.tier ?? "—"],
     ["Pages", formatNumber(s.pages)],
     ["Events", formatNumber(s.events)],
@@ -89,6 +112,27 @@ export default async function SessionDetailPage({
           </div>
         ))}
       </dl>
+
+      {deviceRows.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-3 text-sm font-medium text-ink">
+            Device{" "}
+            <span className="font-mono text-[11px] uppercase tracking-wide text-mute">
+              consented
+            </span>
+          </h2>
+          <dl className="grid grid-cols-1 gap-x-8 gap-y-2 rounded-xl border border-hairline bg-canvas p-4 sm:grid-cols-2">
+            {deviceRows.map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4 text-sm">
+                <dt className="text-mute">{label}</dt>
+                <dd className="text-right font-mono text-[13px] text-ink" translate="no">
+                  {value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
 
       <section className="mt-10">
         <h2 className="mb-4 text-sm font-medium text-ink">Timeline</h2>
