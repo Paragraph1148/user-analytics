@@ -21,7 +21,7 @@ export default function SessionsTable({ sessions }: { sessions: SessionSummary[]
         <thead>
           <tr className="border-b border-hairline bg-canvas-soft text-left">
             <Th>Session</Th>
-            <Th>Path</Th>
+            <Th>Device</Th>
             <Th>Location</Th>
             <Th>Consent</Th>
             <Th>Started</Th>
@@ -48,9 +48,10 @@ export default function SessionsTable({ sessions }: { sessions: SessionSummary[]
                 </Link>
               </td>
               <td className="px-4 py-3 text-body">
-                <span className="font-mono text-[13px]">{s.entryPath}</span>
-                {s.lastPath !== s.entryPath && (
-                  <span className="font-mono text-[13px] text-mute"> → {s.lastPath}</span>
+                {s.device ? (
+                  <span translate="no">{s.device}</span>
+                ) : (
+                  <span className="text-mute">—</span>
                 )}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-body">

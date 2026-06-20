@@ -128,6 +128,11 @@ export function toSessionSummary(doc: Document): SessionSummary {
   };
   if (doc.geo) summary.geo = { country: doc.geo.country, region: doc.geo.region };
   if (doc.consent?.tier) summary.consentTier = doc.consent.tier;
+  if (doc.device) {
+    const d = doc.device as { browser?: string; platform?: string };
+    const browser = d.browser?.replace(/^Google /, "").replace(/\s+[\d.]+$/, ""); // "Chrome"
+    summary.device = [browser, d.platform].filter(Boolean).join(" · ") || undefined;
+  }
   return summary;
 }
 
@@ -247,4 +252,50 @@ export async function getScrollDistribution(path: string): Promise<ScrollBucket[
   return docs
     .filter((d) => typeof d.depthPct === "number")
     .map((d) => ({ depthPct: d.depthPct as number, sessions: d.sessions as number }));
+}
+
+// ---- Per-session analytics (one visitor's own clicks) ------------------------------
+
+/** Click-like points for a single session — powers a per-session heatmap on the detail page. */
+export async function getSessionHeatmapPoints(sessionId: string): Promise<HeatmapPoint[]> {
+  const col = await eventsCollection();
+  const docs = await col
+    .find(
+      { sessionId, type: { $in: POSITIONAL_TYPES }, x: { $exists: true }, y: { $exists: true } },
+      { projection: { _id: 0, x: 1, y: 1, vpW: 1, vpH: 1, type: 1 } },
+    )
+    .limit(MAX_HEATMAP_POINTS)
+    .toArray();
+  return docs
+    .filter((d) => typeof d.vpW === "number" && typeof d.vpH === "number")
+    .map((d) => ({
+      x: d.x as number,
+      y: d.y as number,
+      vpW: d.vpW as number,
+      vpH: d.vpH as number,
+      type: d.type,
+    }));
+}
+
+/** What one session clicked, grouped by element. */
+export async function getSessionTopElements(sessionId: string, limit = 15): Promise<TopElement[]> {
+  const col = await eventsCollection();
+  const docs = await col
+    .aggregate([
+      { $match: { sessionId, type: "click" } },
+      {
+        $group: {
+          _id: { tag: { $ifNull: ["$meta.tag", ""] }, label: { $ifNull: ["$meta.label", ""] } },
+          clicks: { $sum: 1 },
+        },
+      },
+      { $sort: { clicks: -1 } },
+      { $limit: limit },
+    ])
+    .toArray();
+  return docs.map((d) => ({
+    tag: (d._id.tag as string) || "",
+    label: (d._id.label as string) || "",
+    clicks: d.clicks as number,
+  }));
 }

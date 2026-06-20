@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getSessionEvents } from "@/lib/events";
+import { getSessionEvents, getSessionHeatmapPoints } from "@/lib/events";
 import { getSession } from "@/lib/sessions";
 import type { JourneyEvent } from "@/lib/types";
 import { formatDateTime, formatDuration, formatNumber } from "@/lib/format";
 import JourneyTimeline from "@/components/JourneyTimeline";
+import Heatmap from "@/components/Heatmap";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,10 @@ export async function generateMetadata({
   return { title: `Session ${id}` };
 }
 
-function summarize(events: JourneyEvent[]) {
-  const start = new Date(events[0].ts).getTime();
-  const end = new Date(events[events.length - 1].ts).getTime();
+function summarize(events: JourneyEvent[], fallbackStart: string) {
   const exit = events.find((e) => e.type === "page_exit");
+  const start = events.length ? new Date(events[0].ts).getTime() : 0;
+  const end = events.length ? new Date(events[events.length - 1].ts).getTime() : 0;
   const dwellMs =
     exit && typeof exit.meta?.dwellMs === "number" ? exit.meta.dwellMs : end - start;
   const depths = events
@@ -34,7 +35,7 @@ function summarize(events: JourneyEvent[]) {
     clicks: events.filter((e) => e.type === "click").length,
     rage: events.filter((e) => e.type === "rage_click").length,
     dead: events.filter((e) => e.type === "dead_click").length,
-    startedAt: events[0].ts,
+    startedAt: events.length ? events[0].ts : fallbackStart,
     dwellMs,
     maxDepth: depths.length ? Math.max(...depths) : 0,
   };
@@ -46,10 +47,14 @@ export default async function SessionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [events, session] = await Promise.all([getSessionEvents(id), getSession(id)]);
-  if (events.length === 0) notFound();
+  const [events, session, heatPoints] = await Promise.all([
+    getSessionEvents(id),
+    getSession(id),
+    getSessionHeatmapPoints(id),
+  ]);
+  if (events.length === 0 && !session) notFound();
 
-  const s = summarize(events);
+  const s = summarize(events, session?.firstSeen?.toISOString() ?? new Date().toISOString());
   const coarse = session?.geo?.country
     ? session.geo.country + (session.geo.region ? `-${session.geo.region}` : "")
     : null;
@@ -140,9 +145,24 @@ export default async function SessionDetailPage({
         </section>
       )}
 
+      {heatPoints.length > 0 && (
+        <section className="mt-8">
+          <h2 className="mb-1 text-sm font-medium text-ink">Where they clicked</h2>
+          <p className="mb-3 text-xs text-mute">This visitor&apos;s own clicks, normalized to their viewport.</p>
+          <Heatmap points={heatPoints} path={id} />
+        </section>
+      )}
+
       <section className="mt-10">
         <h2 className="mb-4 text-sm font-medium text-ink">Timeline</h2>
-        <JourneyTimeline events={events} />
+        {events.length > 0 ? (
+          <JourneyTimeline events={events} />
+        ) : (
+          <p className="rounded-xl border border-dashed border-hairline-strong/60 bg-canvas-soft p-6 text-sm text-mute">
+            No interaction events were recorded for this session (consent + device captured,
+            but no events arrived — e.g. a very short visit).
+          </p>
+        )}
       </section>
     </main>
   );

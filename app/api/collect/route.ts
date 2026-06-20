@@ -65,10 +65,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     const purposes = { a: consent.a, l: consent.l, d: consent.d };
     const sessionConsent = { tier: tierOf(purposes), version: consent.v, purposes };
     const geo = await lookupGeo(clientIp(req.headers));
-    // TEMP diagnostic: log when geo can't resolve, to inspect the forwarded IP in logs.
-    if (!geo) {
-      console.warn("[geo] unresolved — xff:", req.headers.get("x-forwarded-for"), "x-real-ip:", req.headers.get("x-real-ip"));
-    }
     const now = new Date();
     const ids = [...new Set(result.events.map((e) => e.sessionId))];
     await Promise.all(ids.map((id) => upsertSession(id, { consent: sessionConsent, geo, now })));

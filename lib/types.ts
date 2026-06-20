@@ -29,6 +29,7 @@ export interface SessionSummary {
   lastPath: string;
   geo?: { country?: string; region?: string };
   consentTier?: string;
+  device?: string; // short label to tell sessions apart (e.g. "Android", "Chrome · macOS")
 }
 
 /** One event in a session's ordered journey. */
