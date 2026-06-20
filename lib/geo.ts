@@ -29,22 +29,41 @@ function getReader(): Promise<Reader<CityResponse> | null> {
   return readerPromise;
 }
 
-// Loopback / unspecified addresses can't be geolocated (local dev sends these).
+// A public, geolocatable IP, or null for loopback/private/link-local/CGNAT (which can't be
+// geolocated and may be spoofed in a forged X-Forwarded-For prefix). Strips IPv4-mapped IPv6.
 function usableIp(ip: string | null | undefined): string | null {
-  const v = ip?.trim();
-  if (!v || v === "::1" || v === "::" || v === "127.0.0.1" || v.startsWith("::ffff:127.")) {
+  let s = ip?.trim();
+  if (!s) return null;
+  if (s.startsWith("::ffff:")) s = s.slice(7); // IPv4-mapped IPv6 -> IPv4
+  const low = s.toLowerCase();
+  if (s === "::1" || s === "::" || low.startsWith("fe80") || low.startsWith("fc") || low.startsWith("fd")) {
+    return null; // IPv6 loopback / link-local / unique-local
+  }
+  if (s.startsWith("127.") || s.startsWith("10.") || s.startsWith("192.168.") || s.startsWith("169.254.")) {
     return null;
   }
-  return v;
+  const m172 = s.match(/^172\.(\d+)\./);
+  if (m172 && +m172[1] >= 16 && +m172[1] <= 31) return null; // 172.16/12
+  const m100 = s.match(/^100\.(\d+)\./);
+  if (m100 && +m100[1] >= 64 && +m100[1] <= 127) return null; // 100.64/10 CGNAT
+  return s;
 }
 
-/** First usable IP from the proxy chain (App Runner forwards the client IP in
- *  X-Forwarded-For). On localhost there's no forwarded public IP, so geo can't resolve; set
- *  GEOIP_FALLBACK_IP in development to exercise the geo path locally. Never used in prod. */
+/** The real client IP for geolocation. App Runner (and edge proxies generally) APPEND the
+ *  real client IP to X-Forwarded-For, so the trustworthy value is the LAST public entry —
+ *  taking the first would use a client-forged/private prefix (the bug behind null geo). On
+ *  localhost there's no public IP; set GEOIP_FALLBACK_IP in dev to exercise geo locally. */
 export function clientIp(headers: Headers): string | null {
   const xff = headers.get("x-forwarded-for");
-  const ip = usableIp(xff?.split(",")[0]) ?? usableIp(headers.get("x-real-ip"));
-  if (ip) return ip;
+  if (xff) {
+    const parts = xff.split(",");
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const ip = usableIp(parts[i]);
+      if (ip) return ip;
+    }
+  }
+  const real = usableIp(headers.get("x-real-ip"));
+  if (real) return real;
   if (process.env.NODE_ENV !== "production" && process.env.GEOIP_FALLBACK_IP) {
     return process.env.GEOIP_FALLBACK_IP;
   }
