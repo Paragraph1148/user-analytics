@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { CONSENT_COOKIE, makeState, PRESET_ALL, PRESET_DENIED, serialize } from "@/lib/consent";
 
 // Mock the data layer so the route is tested in isolation (and lib/db is never loaded).
 const insertEvents = vi.fn(async (events: unknown[]) => events.length);
@@ -12,10 +13,15 @@ import { POST } from "@/app/api/collect/route";
 
 const valid = { sessionId: "abc123", type: "click", url: "http://localhost/demo" };
 
+function consentCookie(purposes = PRESET_ALL): string {
+  return `${CONSENT_COOKIE}=${encodeURIComponent(serialize(makeState(purposes)))}`;
+}
+
+// By default, requests carry analytics consent so the body-handling assertions run.
 function post(body: unknown, headers?: Record<string, string>): Request {
   return new Request("http://localhost/api/collect", {
     method: "POST",
-    headers: headers ?? { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Cookie: consentCookie(), ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
@@ -26,11 +32,10 @@ beforeEach(() => {
 });
 
 describe("POST /api/collect", () => {
-  it("accepts a single event", async () => {
+  it("accepts a single event when analytics is consented", async () => {
     const res = await POST(post(valid));
     expect(res.status).toBe(202);
     expect(await res.json()).toEqual({ accepted: 1, rejected: 0 });
-    expect(insertEvents).toHaveBeenCalledOnce();
     expect(insertEvents.mock.calls[0][0]).toHaveLength(1);
   });
 
@@ -53,17 +58,37 @@ describe("POST /api/collect", () => {
     expect(insertEvents).not.toHaveBeenCalled();
   });
 
-  it("honors a DNT header and stores nothing", async () => {
-    const res = await POST(post(valid, { "Content-Type": "application/json", DNT: "1" }));
+  it("stores nothing without a consent cookie", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/collect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(valid),
+      }),
+    );
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ accepted: 0, rejected: 0, skipped: true });
+    expect(await res.json()).toMatchObject({ accepted: 0, skipped: "consent" });
+    expect(insertEvents).not.toHaveBeenCalled();
+  });
+
+  it("stores nothing when analytics consent is withdrawn", async () => {
+    const res = await POST(post(valid, { Cookie: consentCookie(PRESET_DENIED) }));
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ skipped: "consent" });
+    expect(insertEvents).not.toHaveBeenCalled();
+  });
+
+  it("honors a DNT header and stores nothing", async () => {
+    const res = await POST(post(valid, { DNT: "1" }));
+    expect(res.status).toBe(202);
+    expect(await res.json()).toMatchObject({ skipped: "dnt" });
     expect(insertEvents).not.toHaveBeenCalled();
   });
 
   it("honors a Sec-GPC header and stores nothing", async () => {
-    const res = await POST(post(valid, { "Content-Type": "application/json", "Sec-GPC": "1" }));
+    const res = await POST(post(valid, { "Sec-GPC": "1" }));
     expect(res.status).toBe(202);
-    expect(await res.json()).toMatchObject({ skipped: true });
+    expect(await res.json()).toMatchObject({ skipped: "dnt" });
     expect(insertEvents).not.toHaveBeenCalled();
   });
 });

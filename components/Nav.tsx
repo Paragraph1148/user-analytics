@@ -13,6 +13,10 @@ const links = [
 export default function Nav() {
   const pathname = usePathname();
 
+  // The /sample route renders inside the demo iframe as a stand-in customer page — no
+  // dashboard chrome there.
+  if (pathname === "/sample") return null;
+
   return (
     <header className="sticky top-0 z-40 border-b border-hairline bg-canvas/80 backdrop-blur">
       <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">

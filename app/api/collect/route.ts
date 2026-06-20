@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { normalizeBody } from "@/lib/validation";
 import { ensureIndexes, insertEvents } from "@/lib/events";
+import { CONSENT_COOKIE, cookieFromHeader, isAnalyticsAllowed, parse } from "@/lib/consent";
 
 // This route hits the database, so it must run on the Node.js runtime and never be
 // statically cached.
@@ -20,7 +21,15 @@ export async function POST(req: Request): Promise<NextResponse> {
   // request when the user enables DNT/GPC, so we honor them server-side even if a page
   // embeds the tracker without the client-side guard. Drop the body without storing.
   if (req.headers.get("dnt") === "1" || req.headers.get("sec-gpc") === "1") {
-    return NextResponse.json({ accepted: 0, rejected: 0, skipped: true }, { status: 202 });
+    return NextResponse.json({ accepted: 0, rejected: 0, skipped: "dnt" }, { status: 202 });
+  }
+
+  // Consent enforcement: the first-party cf_consent cookie is sent same-origin with every
+  // collect request. Without analytics consent we store nothing — the authoritative check,
+  // independent of what the client claims in the body.
+  const consent = parse(cookieFromHeader(req.headers.get("cookie"), CONSENT_COOKIE));
+  if (!isAnalyticsAllowed(consent)) {
+    return NextResponse.json({ accepted: 0, rejected: 0, skipped: "consent" }, { status: 202 });
   }
 
   let parsed: unknown;

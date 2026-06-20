@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { isAnalyticsAllowed, parse } from "@/lib/consent";
 
 // Mirrors the tracker's privacy guard so the panel reflects what the tracker actually does.
 function privacyOptOut(): string | null {
@@ -29,16 +30,26 @@ function readSessionId(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+function readConsentCookie(): string | null {
+  const m = document.cookie.match(/(?:^|; )cf_consent=([^;]*)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 // Browser-only state read through an external store rather than effect setState. The
 // snapshot is a plain string so React's Object.is check stays stable between polls.
 function subscribe(onChange: () => void): () => void {
   const t = setInterval(onChange, 1000);
-  return () => clearInterval(t);
+  window.addEventListener("cf:consent", onChange);
+  return () => {
+    clearInterval(t);
+    window.removeEventListener("cf:consent", onChange);
+  };
 }
 
 function getSnapshot(): string {
   const reason = privacyOptOut();
   if (reason) return `disabled:${reason}`;
+  if (!isAnalyticsAllowed(parse(readConsentCookie()))) return "awaiting:";
   const id = readSessionId();
   return id ? `active:${id}` : "loading";
 }
@@ -66,6 +77,13 @@ export default function TrackerStatus() {
       </div>
 
       {state === "loading" && <p className="mt-2 text-sm text-mute">Initializing…</p>}
+
+      {state === "awaiting" && (
+        <p className="mt-2 text-sm text-body">
+          Waiting for consent — choose an option in the banner at the bottom of the sample
+          frame. Nothing is collected until you do.
+        </p>
+      )}
 
       {state === "disabled" && (
         <p className="mt-2 text-sm text-body">

@@ -15,8 +15,9 @@ export default function DemoPage() {
         <p className="text-base text-body">
           The sample page below runs <code className="font-mono">/tracker.js</code> inside an
           iframe — its own document, exactly like the tracker would live on a real customer
-          site. That keeps tracking scoped to the sample page and out of this dashboard.
-          Interact with it, then view the data in the dashboard.
+          site. It collects nothing until you accept analytics in the consent banner at the
+          bottom of the frame. Choose a consent option, interact, then view the data in the
+          dashboard.
         </p>
       </header>
 
@@ -27,7 +28,7 @@ export default function DemoPage() {
       <section className="mt-8">
         <h2 className="mb-2 text-sm font-medium text-ink">Sample page (tracked)</h2>
         <iframe
-          src="/sample.html"
+          src="/sample"
           title="Sample page with the analytics tracker"
           className="h-[600px] w-full rounded-xl border border-hairline bg-canvas"
         />
@@ -37,21 +38,27 @@ export default function DemoPage() {
         <h2 className="text-sm font-medium text-ink">Verifying it works</h2>
         <ol className="mt-2 list-decimal space-y-1 pl-5">
           <li>
-            In the sample page above: click the buttons, click the empty area (dead clicks),
-            click one spot rapidly (rage clicks), and scroll.
+            In the consent banner at the bottom of the frame, choose{" "}
+            <strong className="font-medium text-ink">Allow all</strong> or{" "}
+            <strong className="font-medium text-ink">Necessary only</strong>. Until then,
+            nothing is collected.
+          </li>
+          <li>
+            Then click the buttons, click the empty area (dead clicks), click one spot rapidly
+            (rage clicks), and scroll.
           </li>
           <li>
             Open the Network tab and filter for <code className="font-mono">collect</code> —
-            events batch and post every few seconds, and flush via{" "}
-            <code className="font-mono">sendBeacon</code> when the page is hidden.
+            events post only after consent; <code className="font-mono">Withdraw all</code>{" "}
+            stops them immediately.
           </li>
           <li>
             Open <code className="font-mono">/sessions</code> and{" "}
             <code className="font-mono">/heatmap</code> to see the journey and heatmap.
           </li>
           <li>
-            Enable Do Not Track / GPC and reload — the status above flips to off and nothing
-            is sent.
+            Enable Do Not Track / GPC and reload — the banner shows the opt-out and nothing is
+            sent, overriding any choice.
           </li>
         </ol>
       </section>
