@@ -72,6 +72,32 @@ These are non-negotiable in the production path:
 - **No PII.** Clicks are coordinates + element tag — never input values or typed text.
   Incoming payloads are validated server-side and unknown fields are stripped.
 
+## Consent & data-subject rights (v2)
+
+v2 adds richer, consent-gated collection while keeping the privacy posture above. The model
+is **privacy through control**, enforced end to end:
+
+- **Opt-in before collection.** A consent banner offers **Necessary / Allow all / Manage**
+  (granular per-purpose toggles: `analytics`, `precise_location`, `device_profiling`).
+  Nothing is collected until the user chooses; pre-consent events are dropped.
+- **GPC/DNT is a hard override** above the banner — if set, nothing is collected regardless
+  of any choice.
+- **Server-enforced consent.** `/api/collect` and `/api/session` independently re-check the
+  first-party `cf_consent` cookie and drop anything a purpose doesn't permit — the client is
+  never trusted to self-censor.
+- **Data minimization.** The raw IP is derived to coarse country/region and **dropped, never
+  stored**; precise coordinates are **rounded to ~110 m**; device profiles are sanitized to
+  known fields.
+- **Right to erasure (self-serve).** "Delete my data" calls `DELETE /api/sessions/[id]`,
+  authorized by the first-party cookie (a visitor can only delete their own data). It purges
+  events, the session record, and consent-log entries.
+- **Withdrawal** stops collection immediately (consent set to denied; the tracker tears down
+  live).
+- **Retention.** Raw events expire via a MongoDB **TTL index (90 days)**; derived sessions
+  and the **consent-log audit trail** (record of every consent decision) are kept.
+- **Still off-limits even with consent:** evercookie respawning — it conflicts with the right
+  to withdraw, so it stays a `/research` study only.
+
 ## How it works
 
 ### Tracker (`public/tracker.js`)

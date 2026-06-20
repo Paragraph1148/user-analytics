@@ -130,3 +130,21 @@ export async function getSession(sessionId: string): Promise<SessionDoc | null> 
   const db = await getDb();
   return db.collection<SessionDoc>("sessions").findOne({ _id: sessionId });
 }
+
+/** Right to erasure: remove everything tied to a session — events, the session record, and
+ *  its consent-log entries. Returns how many documents were deleted from each. */
+export async function deleteSessionData(
+  sessionId: string,
+): Promise<{ events: number; sessions: number; consentLog: number }> {
+  const db = await getDb();
+  const [events, sessions, consentLog] = await Promise.all([
+    db.collection("events").deleteMany({ sessionId }),
+    db.collection<SessionDoc>("sessions").deleteMany({ _id: sessionId }),
+    db.collection("consent_log").deleteMany({ sessionId }),
+  ]);
+  return {
+    events: events.deletedCount,
+    sessions: sessions.deletedCount,
+    consentLog: consentLog.deletedCount,
+  };
+}

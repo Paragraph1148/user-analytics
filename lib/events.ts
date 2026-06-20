@@ -25,6 +25,10 @@ const MAX_HEATMAP_POINTS = 8000;
 // Click-like events that carry coordinates and belong on the heatmap.
 const POSITIONAL_TYPES: EventType[] = ["click", "rage_click", "dead_click"];
 
+// Retention: raw events expire after this window (a MongoDB TTL index). Derived sessions
+// and the consent-log audit trail are kept.
+const RETENTION_DAYS = 90;
+
 export async function eventsCollection(): Promise<Collection<AnalyticsEvent>> {
   const db = await getDb();
   return db.collection<AnalyticsEvent>(COLLECTION);
@@ -40,8 +44,8 @@ export async function insertEvents(events: AnalyticsEvent[]): Promise<number> {
 }
 
 // Index creation is idempotent, so calling this on startup (or first ingest) is safe.
-// Indexes mirror the three read paths: per-session journey, heatmap-by-page, recent
-// sessions list.
+// Indexes mirror the read paths (per-session journey, heatmap-by-page) plus a TTL index on
+// `ts` that enforces retention and doubles as the recent-first sort index.
 let indexesEnsured: Promise<void> | null = null;
 
 export function ensureIndexes(): Promise<void> {
@@ -51,7 +55,7 @@ export function ensureIndexes(): Promise<void> {
       await col.createIndexes([
         { key: { sessionId: 1, ts: 1 }, name: "session_journey" },
         { key: { path: 1, type: 1 }, name: "heatmap_by_page" },
-        { key: { ts: -1 }, name: "recent" },
+        { key: { ts: 1 }, name: "ts_ttl", expireAfterSeconds: RETENTION_DAYS * 86400 },
       ]);
     })().catch((err) => {
       // Reset so a transient failure can be retried on the next request.

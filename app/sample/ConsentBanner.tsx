@@ -104,6 +104,25 @@ export default function ConsentBanner() {
     close();
   }
 
+  // Right to erasure: delete this browser's data, stop collection, and reset the session id.
+  function deleteMyData() {
+    const m = document.cookie.match(/(?:^|; )cf_sid=([^;]*)/);
+    const sid = m ? decodeURIComponent(m[1]) : null;
+    if (!window.confirm("Delete all analytics data collected from this browser? This can't be undone.")) {
+      return;
+    }
+    if (sid) {
+      fetch(`/api/sessions/${encodeURIComponent(sid)}`, { method: "DELETE" }).catch(() => {});
+      document.cookie = "cf_sid=; Max-Age=0; Path=/; SameSite=Lax";
+      try {
+        localStorage.removeItem("cf_sid");
+      } catch {
+        /* ignore */
+      }
+    }
+    apply(PRESET_DENIED); // stop collection + collapse
+  }
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-hairline bg-canvas/95 backdrop-blur">
       <div className="mx-auto max-w-3xl px-6 py-5">
@@ -179,13 +198,22 @@ export default function ConsentBanner() {
                 </>
               )}
               {consent && (
-                <button
-                  type="button"
-                  onClick={() => apply(PRESET_DENIED)}
-                  className="ml-auto rounded-sm text-xs text-mute underline-offset-4 hover:text-signal-rage hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-                >
-                  Withdraw all
-                </button>
+                <div className="ml-auto flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={() => apply(PRESET_DENIED)}
+                    className="rounded-sm text-xs text-mute underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  >
+                    Withdraw all
+                  </button>
+                  <button
+                    type="button"
+                    onClick={deleteMyData}
+                    className="rounded-sm text-xs text-mute underline-offset-4 hover:text-signal-rage hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+                  >
+                    Delete my data
+                  </button>
+                </div>
               )}
             </div>
           </>
