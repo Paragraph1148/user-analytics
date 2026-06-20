@@ -26,12 +26,26 @@ export default function DemoPage() {
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-2 text-sm font-medium text-ink">Sample page (tracked)</h2>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-ink">Sample page (tracked)</h2>
+          <a
+            href="/sample"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-sm text-sm text-link underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
+          >
+            Open full-screen ↗
+          </a>
+        </div>
         <iframe
           src="/sample"
           title="Sample page with the analytics tracker"
           className="h-[600px] w-full rounded-xl border border-hairline bg-canvas"
         />
+        <p className="mt-2 text-xs text-mute">
+          The consent banner lives on this tracked page (shown in the frame). The dashboard
+          itself is never tracked. Open full-screen to see the consent flow at full size.
+        </p>
       </section>
 
       <section className="mt-10 text-sm text-body">
