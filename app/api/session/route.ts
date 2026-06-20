@@ -5,6 +5,7 @@
 import { NextResponse } from "next/server";
 import { CONSENT_COOKIE, cookieFromHeader, parse, tierOf } from "@/lib/consent";
 import { isValidSessionId } from "@/lib/validation";
+import { clientIp, lookupGeo } from "@/lib/geo";
 import { roundPrecise, sanitizeDevice, updateSessionAttributes } from "@/lib/sessions";
 
 export const runtime = "nodejs";
@@ -35,7 +36,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   // precise_location (l). Drop whatever isn't consented.
   const device = consent.d ? sanitizeDevice(body.device) : null;
   const precise = consent.l ? roundPrecise(body.precise) : null;
-  if (!device && !precise) {
+  // Also resolve coarse geo here so sessions get a location even if their events never
+  // arrive (e.g. a quick visit where the beacon didn't deliver).
+  const geo = await lookupGeo(clientIp(req.headers));
+  if (!device && !precise && !geo) {
     return NextResponse.json({ skipped: "nothing-permitted" }, { status: 202 });
   }
 
@@ -44,6 +48,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     await updateSessionAttributes(body.sessionId, {
       device,
       precise,
+      geo,
       consent: { tier: tierOf(purposes), version: consent.v, purposes },
       now: new Date(),
     });

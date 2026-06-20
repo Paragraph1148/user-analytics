@@ -66,66 +66,75 @@ export function ensureIndexes(): Promise<void> {
   return indexesEnsured;
 }
 
-// ---- Sessions list (derived) -------------------------------------------------------
+// ---- Sessions list -----------------------------------------------------------------
 
 const countType = (t: string): Document => ({ $sum: { $cond: [{ $eq: ["$type", t] }, 1, 0] } });
 
 /**
- * Aggregation that derives the sessions list from `events`. Pure (no I/O) so it can be
- * unit-tested. $top/$bottom pick entry/exit path by timestamp without a global sort.
+ * Sessions list driven by the `sessions` collection (the authoritative record of who
+ * visited, incl. consent + geo), enriched with event-derived stats via a lookup. Driving
+ * from `sessions` means sessions whose events never arrived (e.g. a lost beacon) still
+ * appear, instead of vanishing. Pure (no I/O) so it's unit-testable. Runs on `sessions`.
  */
 export function sessionsPipeline(limit: number): Document[] {
   return [
-    {
-      $group: {
-        _id: "$sessionId",
-        events: { $sum: 1 },
-        firstSeen: { $min: "$ts" },
-        lastSeen: { $max: "$ts" },
-        pageViews: countType("page_view"),
-        clicks: countType("click"),
-        rageClicks: countType("rage_click"),
-        deadClicks: countType("dead_click"),
-        // Events in one batch share a server receive time, so break ts ties by _id
-        // (insertion order = the client's enqueue sequence) for a stable entry/exit.
-        entryPath: { $top: { sortBy: { ts: 1, _id: 1 }, output: "$path" } },
-        lastPath: { $bottom: { sortBy: { ts: 1, _id: 1 }, output: "$path" } },
-      },
-    },
     { $sort: { lastSeen: -1 } },
     { $limit: limit },
-    // Enrich the (limited) set with session-level geo + consent from the sessions collection.
-    { $lookup: { from: "sessions", localField: "_id", foreignField: "_id", as: "_session" } },
+    {
+      $lookup: {
+        from: "events",
+        let: { sid: "$_id" },
+        pipeline: [
+          { $match: { $expr: { $eq: ["$sessionId", "$$sid"] } } },
+          {
+            $group: {
+              _id: null,
+              events: { $sum: 1 },
+              firstSeen: { $min: "$ts" },
+              lastSeen: { $max: "$ts" },
+              pageViews: countType("page_view"),
+              clicks: countType("click"),
+              rageClicks: countType("rage_click"),
+              deadClicks: countType("dead_click"),
+              // ts ties (same batch) broken by _id = enqueue order, for a stable entry/exit.
+              entryPath: { $top: { sortBy: { ts: 1, _id: 1 }, output: "$path" } },
+              lastPath: { $bottom: { sortBy: { ts: 1, _id: 1 }, output: "$path" } },
+            },
+          },
+        ],
+        as: "stats",
+      },
+    },
   ];
 }
 
-/** Map one aggregation result document into the API's SessionSummary shape. */
+/** Map a session doc (+ looked-up event stats) into the API's SessionSummary shape. */
 export function toSessionSummary(doc: Document): SessionSummary {
-  const first = doc.firstSeen as Date;
-  const last = doc.lastSeen as Date;
-  const session = Array.isArray(doc._session) ? doc._session[0] : undefined;
+  const st = (Array.isArray(doc.stats) ? doc.stats[0] : undefined) ?? {};
+  const first = (st.firstSeen as Date) ?? (doc.firstSeen as Date);
+  const last = (st.lastSeen as Date) ?? (doc.lastSeen as Date);
   const summary: SessionSummary = {
     sessionId: doc._id as string,
-    events: doc.events as number,
-    pageViews: doc.pageViews as number,
-    clicks: doc.clicks as number,
-    rageClicks: doc.rageClicks as number,
-    deadClicks: doc.deadClicks as number,
+    events: (st.events as number) ?? 0,
+    pageViews: (st.pageViews as number) ?? 0,
+    clicks: (st.clicks as number) ?? 0,
+    rageClicks: (st.rageClicks as number) ?? 0,
+    deadClicks: (st.deadClicks as number) ?? 0,
     firstSeen: first.toISOString(),
     lastSeen: last.toISOString(),
     durationMs: last.getTime() - first.getTime(),
-    entryPath: (doc.entryPath as string) ?? "",
-    lastPath: (doc.lastPath as string) ?? "",
+    entryPath: (st.entryPath as string) ?? "—",
+    lastPath: (st.lastPath as string) ?? "—",
   };
-  if (session?.geo) summary.geo = { country: session.geo.country, region: session.geo.region };
-  if (session?.consent?.tier) summary.consentTier = session.consent.tier;
+  if (doc.geo) summary.geo = { country: doc.geo.country, region: doc.geo.region };
+  if (doc.consent?.tier) summary.consentTier = doc.consent.tier;
   return summary;
 }
 
 export async function listSessions(limit = 50): Promise<SessionSummary[]> {
   const capped = Math.min(Math.max(limit, 1), MAX_SESSIONS);
-  const col = await eventsCollection();
-  const docs = await col.aggregate(sessionsPipeline(capped)).toArray();
+  const db = await getDb();
+  const docs = await db.collection("sessions").aggregate(sessionsPipeline(capped)).toArray();
   return docs.map(toSessionSummary);
 }
 

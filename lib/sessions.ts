@@ -108,6 +108,7 @@ export async function updateSessionAttributes(
   data: {
     device?: DeviceProfile | null;
     precise?: { lat: number; lng: number } | null;
+    geo?: Geo | null;
     consent: SessionConsent;
     now: Date;
   },
@@ -115,6 +116,7 @@ export async function updateSessionAttributes(
   const set: Record<string, unknown> = {};
   if (data.device) set.device = data.device;
   if (data.precise) set.precise = data.precise;
+  if (data.geo) set.geo = { ...data.geo, source: "ip" };
   if (Object.keys(set).length === 0) return false;
   set.lastSeen = data.now;
 

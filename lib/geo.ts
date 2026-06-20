@@ -14,11 +14,17 @@ export interface Geo {
 
 const DB_PATH = process.env.GEOIP_DB_PATH ?? "./data/GeoLite2-City.mmdb";
 
-// Open the DB once; on failure (missing file) cache null so we don't retry every request.
+// Open the DB once and reuse the reader. A failed open is NOT cached permanently — we reset
+// so the next lookup retries (otherwise one transient cold-start failure would disable geo
+// for the whole life of that instance).
 let readerPromise: Promise<Reader<CityResponse> | null> | null = null;
 function getReader(): Promise<Reader<CityResponse> | null> {
   if (!readerPromise) {
-    readerPromise = open<CityResponse>(DB_PATH).catch(() => null);
+    readerPromise = open<CityResponse>(DB_PATH).catch((err) => {
+      console.error("[geo] failed to open DB at", DB_PATH, err instanceof Error ? err.message : err);
+      readerPromise = null; // allow a retry on the next call
+      return null;
+    });
   }
   return readerPromise;
 }

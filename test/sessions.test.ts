@@ -7,73 +7,66 @@ import {
 } from "@/lib/events";
 
 describe("sessionsPipeline", () => {
-  it("groups by sessionId with the expected accumulators", () => {
-    const stages = sessionsPipeline(25) as Array<Record<string, unknown>>;
-    const group = (stages.find((s) => "$group" in s) as { $group: Record<string, unknown> })
-      .$group;
-    expect(group._id).toBe("$sessionId");
-    for (const k of ["events", "firstSeen", "lastSeen", "pageViews", "clicks", "rageClicks", "deadClicks", "entryPath", "lastPath"]) {
-      expect(group).toHaveProperty(k);
-    }
-  });
-
-  it("sorts by most-recent, limits, and joins the sessions collection", () => {
+  it("runs on sessions: sorts, limits, and looks up event stats", () => {
     const stages = sessionsPipeline(25) as Array<Record<string, unknown>>;
     expect(stages.some((s) => JSON.stringify(s.$sort) === JSON.stringify({ lastSeen: -1 }))).toBe(true);
     expect(stages.some((s) => s.$limit === 25)).toBe(true);
-    expect(
-      stages.some((s) => (s.$lookup as { from?: string } | undefined)?.from === "sessions"),
-    ).toBe(true);
+    const lookup = stages.find((s) => "$lookup" in s)!.$lookup as {
+      from: string;
+      pipeline: Array<Record<string, unknown>>;
+    };
+    expect(lookup.from).toBe("events");
+    const group = lookup.pipeline.find((s) => "$group" in s)!.$group as Record<string, unknown>;
+    for (const k of ["events", "pageViews", "clicks", "rageClicks", "deadClicks", "entryPath", "lastPath"]) {
+      expect(group).toHaveProperty(k);
+    }
   });
 });
 
 describe("toSessionSummary", () => {
-  it("maps a raw doc and computes durationMs from first/last seen", () => {
-    const first = new Date("2026-06-19T10:00:00.000Z");
-    const last = new Date("2026-06-19T10:05:30.000Z");
+  it("maps a session doc + looked-up stats, computing durationMs", () => {
     const summary = toSessionSummary({
       _id: "sess_1",
-      events: 12,
-      firstSeen: first,
-      lastSeen: last,
-      pageViews: 2,
-      clicks: 8,
-      rageClicks: 1,
-      deadClicks: 1,
-      entryPath: "/demo",
-      lastPath: "/pricing",
+      geo: { country: "US", region: "CA", source: "ip" },
+      consent: { tier: "all" },
+      stats: [
+        {
+          events: 12,
+          firstSeen: new Date("2026-06-19T10:00:00.000Z"),
+          lastSeen: new Date("2026-06-19T10:05:30.000Z"),
+          pageViews: 2,
+          clicks: 8,
+          rageClicks: 1,
+          deadClicks: 1,
+          entryPath: "/demo",
+          lastPath: "/pricing",
+        },
+      ],
     });
-
-    expect(summary).toEqual({
+    expect(summary).toMatchObject({
       sessionId: "sess_1",
       events: 12,
-      pageViews: 2,
       clicks: 8,
-      rageClicks: 1,
-      deadClicks: 1,
-      firstSeen: "2026-06-19T10:00:00.000Z",
-      lastSeen: "2026-06-19T10:05:30.000Z",
       durationMs: 330_000,
       entryPath: "/demo",
       lastPath: "/pricing",
+      geo: { country: "US", region: "CA" },
+      consentTier: "all",
     });
   });
 
-  it("maps joined geo + consent tier when the session record is present", () => {
+  it("handles a session with no events (ghost session) using session timestamps", () => {
+    const t = new Date("2026-06-19T10:00:00.000Z");
     const summary = toSessionSummary({
-      _id: "sess_2",
-      events: 1,
-      firstSeen: new Date("2026-06-19T10:00:00Z"),
-      lastSeen: new Date("2026-06-19T10:00:00Z"),
-      pageViews: 1,
-      clicks: 0,
-      rageClicks: 0,
-      deadClicks: 0,
-      entryPath: "/",
-      lastPath: "/",
-      _session: [{ geo: { country: "US", region: "CA", source: "ip" }, consent: { tier: "all" } }],
+      _id: "ghost",
+      firstSeen: t,
+      lastSeen: t,
+      consent: { tier: "all" },
+      stats: [],
     });
-    expect(summary.geo).toEqual({ country: "US", region: "CA" });
+    expect(summary.events).toBe(0);
+    expect(summary.entryPath).toBe("—");
+    expect(summary.durationMs).toBe(0);
     expect(summary.consentTier).toBe("all");
   });
 });

@@ -408,6 +408,7 @@
     window.addEventListener("scroll", onScroll, { passive: true });
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pagehide", sendExit);
+    flush(false); // send the page_view right away so the session lands promptly
     flushTimerId = setInterval(function () {
       flush(false);
     }, FLUSH_INTERVAL);
