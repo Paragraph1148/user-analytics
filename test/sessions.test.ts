@@ -89,6 +89,18 @@ describe("topElementsPipeline", () => {
   });
 });
 
+describe("sessionBreakdownPipeline", () => {
+  it("groups sessions by a field path, most first, excluding nulls", async () => {
+    const { sessionBreakdownPipeline } = await import("@/lib/sessions");
+    const stages = sessionBreakdownPipeline("geo.country", 10) as Array<Record<string, unknown>>;
+    const match = stages.find((s) => "$match" in s)!.$match as Record<string, unknown>;
+    expect(match["geo.country"]).toEqual({ $exists: true, $ne: null });
+    const group = stages.find((s) => "$group" in s)!.$group as { _id: string };
+    expect(group._id).toBe("$geo.country");
+    expect(stages.some((s) => s.$limit === 10)).toBe(true);
+  });
+});
+
 describe("scrollDistributionPipeline", () => {
   it("counts distinct sessions per depth milestone for a path", () => {
     const stages = scrollDistributionPipeline("/demo") as Array<Record<string, unknown>>;

@@ -2,6 +2,7 @@
 // every event: the current consent, coarse geo, and first/last seen. It's upserted on each
 // ingest. Events remain the append-only source of truth for behavior.
 
+import type { Document } from "mongodb";
 import { getDb } from "./db";
 import type { Geo } from "./geo";
 import type { Purposes, Tier } from "./consent";
@@ -129,6 +130,39 @@ export async function updateSessionAttributes(
 export async function getSession(sessionId: string): Promise<SessionDoc | null> {
   const db = await getDb();
   return db.collection<SessionDoc>("sessions").findOne({ _id: sessionId });
+}
+
+export interface Breakdown {
+  value: string;
+  sessions: number;
+}
+
+/** Group sessions by a (controlled, internal) field path — powers the audience breakdowns
+ *  (country, browser, platform, consent tier). Pure for unit testing. */
+export function sessionBreakdownPipeline(field: string, limit: number): Document[] {
+  return [
+    { $match: { [field]: { $exists: true, $ne: null } } },
+    { $group: { _id: "$" + field, sessions: { $sum: 1 } } },
+    { $sort: { sessions: -1 } },
+    { $limit: limit },
+  ];
+}
+
+export async function sessionBreakdown(field: string, limit = 20): Promise<Breakdown[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection("sessions")
+    .aggregate(sessionBreakdownPipeline(field, limit))
+    .toArray();
+  return docs.map((d) => ({
+    value: d._id == null ? "(unknown)" : String(d._id),
+    sessions: d.sessions as number,
+  }));
+}
+
+export async function countSessions(): Promise<number> {
+  const db = await getDb();
+  return db.collection("sessions").estimatedDocumentCount();
 }
 
 /** Right to erasure: remove everything tied to a session — events, the session record, and

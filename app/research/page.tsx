@@ -15,19 +15,30 @@ export default function ResearchPage() {
       {/* Loud, unmistakable separation from the product. */}
       <div className="rounded-xl border border-signal-dead/40 bg-signal-dead/10 p-5">
         <p className="font-mono text-xs uppercase tracking-wide text-signal-dead">
-          Study only — not the product
+          Study — the line we draw
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink text-balance">
-          Invasive tracking techniques, and how privacy tools defeat them
+          What we do with consent, and what we refuse even with it
         </h1>
         <p className="mt-3 text-sm leading-6 text-body text-pretty">
-          These interactive demos show how invasive tracking actually works, so the
-          privacy-forward choices in the core pipeline are concrete rather than abstract.
-          They run entirely in your browser, transmit nothing to the server, and are{" "}
-          <strong className="font-medium text-ink">deliberately not used</strong> anywhere in
-          the real analytics pipeline. That pipeline uses a single random first-party id,
-          honors Do Not Track / GPC, and never fingerprints or respawns identifiers.
+          The product now collects rich data — detailed device characteristics and precise
+          location — but only behind <strong className="font-medium text-ink">explicit,
+          granular, revocable consent</strong>, as first-party data you can see and delete.
+          These demos show the invasive end of the same techniques so the boundary is
+          concrete. They run entirely in your browser and transmit nothing.
         </p>
+        <ul className="mt-3 space-y-1 text-sm text-body">
+          <li>
+            <strong className="font-medium text-ink">Device profiling</strong> — we do this
+            under the device-profiling purpose, but as a first-party profile, never hashed
+            into a cross-site fingerprint.
+          </li>
+          <li>
+            <strong className="font-medium text-ink">Evercookie respawning</strong> — we
+            refuse this even with consent: it defeats the right to withdraw and erase, which
+            we honor. Study only.
+          </li>
+        </ul>
       </div>
 
       <Technique
@@ -41,6 +52,10 @@ export default function ResearchPage() {
           "Reducing entropy: uniform user agents, capped screen/timezone precision.",
           "Because nothing is stored, the only defense is reducing or randomizing the signals themselves.",
         ]}
+        note={{
+          label: "We collect device signals — but only with consent.",
+          body: "Under the device-profiling purpose they're stored as a first-party profile you can see and delete, never hashed into a cross-site fingerprint.",
+        }}
       >
         <FingerprintDemo />
       </Technique>
@@ -56,6 +71,10 @@ export default function ResearchPage() {
           "Storage partitioning and total cookie protection isolate vectors per site.",
           "Extensions and hardened browsers block known respawning patterns.",
         ]}
+        note={{
+          label: "Refused even with consent.",
+          body: "Respawning defeats the right to withdraw and erase, which the product honors — so this stays a study only.",
+        }}
       >
         <EvercookieDemo />
       </Technique>
@@ -80,6 +99,7 @@ function Technique({
   howItWorks,
   whyInvasive,
   defenses,
+  note,
   children,
 }: {
   n: number;
@@ -87,6 +107,7 @@ function Technique({
   howItWorks: string;
   whyInvasive: string;
   defenses: string[];
+  note: { label: string; body: string };
   children: React.ReactNode;
 }) {
   return (
@@ -123,8 +144,7 @@ function Technique({
       </div>
 
       <p className="mt-6 border-l-2 border-signal-dead/50 bg-canvas-soft py-2 pl-3 text-sm text-body">
-        <strong className="font-medium text-ink">Not used in the core pipeline.</strong> The
-        production tracker relies on a random first-party id only.
+        <strong className="font-medium text-ink">{note.label}</strong> {note.body}
       </p>
     </section>
   );
