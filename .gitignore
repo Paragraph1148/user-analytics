@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# MaxMind GeoLite2 database — licensed, must not be committed (download with a key).
+/data
+
 # vercel
 .vercel
 

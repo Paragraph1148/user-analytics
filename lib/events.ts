@@ -88,6 +88,8 @@ export function sessionsPipeline(limit: number): Document[] {
     },
     { $sort: { lastSeen: -1 } },
     { $limit: limit },
+    // Enrich the (limited) set with session-level geo + consent from the sessions collection.
+    { $lookup: { from: "sessions", localField: "_id", foreignField: "_id", as: "_session" } },
   ];
 }
 
@@ -95,7 +97,8 @@ export function sessionsPipeline(limit: number): Document[] {
 export function toSessionSummary(doc: Document): SessionSummary {
   const first = doc.firstSeen as Date;
   const last = doc.lastSeen as Date;
-  return {
+  const session = Array.isArray(doc._session) ? doc._session[0] : undefined;
+  const summary: SessionSummary = {
     sessionId: doc._id as string,
     events: doc.events as number,
     pageViews: doc.pageViews as number,
@@ -108,6 +111,9 @@ export function toSessionSummary(doc: Document): SessionSummary {
     entryPath: (doc.entryPath as string) ?? "",
     lastPath: (doc.lastPath as string) ?? "",
   };
+  if (session?.geo) summary.geo = { country: session.geo.country, region: session.geo.region };
+  if (session?.consent?.tier) summary.consentTier = session.consent.tier;
+  return summary;
 }
 
 export async function listSessions(limit = 50): Promise<SessionSummary[]> {

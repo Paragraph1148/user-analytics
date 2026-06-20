@@ -27,6 +27,8 @@ export interface SessionSummary {
   durationMs: number;
   entryPath: string;
   lastPath: string;
+  geo?: { country?: string; region?: string };
+  consentTier?: string;
 }
 
 /** One event in a session's ordered journey. */

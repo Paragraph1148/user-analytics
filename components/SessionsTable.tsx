@@ -22,6 +22,8 @@ export default function SessionsTable({ sessions }: { sessions: SessionSummary[]
           <tr className="border-b border-hairline bg-canvas-soft text-left">
             <Th>Session</Th>
             <Th>Path</Th>
+            <Th>Location</Th>
+            <Th>Consent</Th>
             <Th>Started</Th>
             <Th align="right">Duration</Th>
             <Th align="right">Events</Th>
@@ -49,6 +51,25 @@ export default function SessionsTable({ sessions }: { sessions: SessionSummary[]
                 <span className="font-mono text-[13px]">{s.entryPath}</span>
                 {s.lastPath !== s.entryPath && (
                   <span className="font-mono text-[13px] text-mute"> → {s.lastPath}</span>
+                )}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-body">
+                {s.geo?.country ? (
+                  <span className="font-mono text-[13px]" translate="no">
+                    {s.geo.country}
+                    {s.geo.region ? `-${s.geo.region}` : ""}
+                  </span>
+                ) : (
+                  <span className="text-mute">—</span>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                {s.consentTier ? (
+                  <span className="font-mono text-[11px] uppercase tracking-wide text-body">
+                    {s.consentTier}
+                  </span>
+                ) : (
+                  <span className="text-mute">—</span>
                 )}
               </td>
               <td className="whitespace-nowrap px-4 py-3 text-body">

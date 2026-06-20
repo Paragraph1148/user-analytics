@@ -3,18 +3,22 @@ import { sessionsPipeline, toSessionSummary } from "@/lib/events";
 
 describe("sessionsPipeline", () => {
   it("groups by sessionId with the expected accumulators", () => {
-    const pipeline = sessionsPipeline(25);
-    const group = (pipeline[0] as { $group: Record<string, unknown> }).$group;
+    const stages = sessionsPipeline(25) as Array<Record<string, unknown>>;
+    const group = (stages.find((s) => "$group" in s) as { $group: Record<string, unknown> })
+      .$group;
     expect(group._id).toBe("$sessionId");
     for (const k of ["events", "firstSeen", "lastSeen", "pageViews", "clicks", "rageClicks", "deadClicks", "entryPath", "lastPath"]) {
       expect(group).toHaveProperty(k);
     }
   });
 
-  it("sorts by most-recent and applies the given limit", () => {
-    const pipeline = sessionsPipeline(25);
-    expect(pipeline.at(-2)).toEqual({ $sort: { lastSeen: -1 } });
-    expect(pipeline.at(-1)).toEqual({ $limit: 25 });
+  it("sorts by most-recent, limits, and joins the sessions collection", () => {
+    const stages = sessionsPipeline(25) as Array<Record<string, unknown>>;
+    expect(stages.some((s) => JSON.stringify(s.$sort) === JSON.stringify({ lastSeen: -1 }))).toBe(true);
+    expect(stages.some((s) => s.$limit === 25)).toBe(true);
+    expect(
+      stages.some((s) => (s.$lookup as { from?: string } | undefined)?.from === "sessions"),
+    ).toBe(true);
   });
 });
 
@@ -48,5 +52,23 @@ describe("toSessionSummary", () => {
       entryPath: "/demo",
       lastPath: "/pricing",
     });
+  });
+
+  it("maps joined geo + consent tier when the session record is present", () => {
+    const summary = toSessionSummary({
+      _id: "sess_2",
+      events: 1,
+      firstSeen: new Date("2026-06-19T10:00:00Z"),
+      lastSeen: new Date("2026-06-19T10:00:00Z"),
+      pageViews: 1,
+      clicks: 0,
+      rageClicks: 0,
+      deadClicks: 0,
+      entryPath: "/",
+      lastPath: "/",
+      _session: [{ geo: { country: "US", region: "CA", source: "ip" }, consent: { tier: "all" } }],
+    });
+    expect(summary.geo).toEqual({ country: "US", region: "CA" });
+    expect(summary.consentTier).toBe("all");
   });
 });

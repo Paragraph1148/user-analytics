@@ -7,6 +7,20 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ---- geo: download the MaxMind GeoLite2-City DB (licensed; not committed) ----
+# Provide the key at build time: `--build-arg MAXMIND_LICENSE_KEY=...`. Without it the image
+# builds fine and geo lookups degrade to "unknown".
+FROM node:22-alpine AS geo
+ARG MAXMIND_LICENSE_KEY=""
+WORKDIR /geo
+RUN apk add --no-cache curl tar && mkdir -p out && \
+    if [ -n "$MAXMIND_LICENSE_KEY" ]; then \
+      curl -fsSL "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=${MAXMIND_LICENSE_KEY}&suffix=tar.gz" -o db.tar.gz && \
+      tar -xzf db.tar.gz && \
+      find . -name 'GeoLite2-City.mmdb' -exec cp {} out/GeoLite2-City.mmdb \; && \
+      echo "GeoLite2 downloaded"; \
+    else echo "No MAXMIND_LICENSE_KEY — geo disabled"; fi
+
 # ---- builder: produce the standalone output ----
 FROM node:22-alpine AS builder
 WORKDIR /app
@@ -24,6 +38,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # App Runner provides PORT; default to 3000 locally. Bind all interfaces.
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV GEOIP_DB_PATH=/app/data/GeoLite2-City.mmdb
 
 # Run as a non-root user.
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
@@ -35,6 +50,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 # Static assets (JS/CSS chunks) the standalone server serves:
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+# GeoLite2 DB (empty dir if no license key was provided at build).
+COPY --from=geo --chown=nextjs:nodejs /geo/out ./data
 
 USER nextjs
 EXPOSE 3000

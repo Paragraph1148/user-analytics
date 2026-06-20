@@ -9,7 +9,9 @@
 import { NextResponse } from "next/server";
 import { normalizeBody } from "@/lib/validation";
 import { ensureIndexes, insertEvents } from "@/lib/events";
-import { CONSENT_COOKIE, cookieFromHeader, isAnalyticsAllowed, parse } from "@/lib/consent";
+import { CONSENT_COOKIE, cookieFromHeader, parse, tierOf } from "@/lib/consent";
+import { clientIp, lookupGeo } from "@/lib/geo";
+import { upsertSession } from "@/lib/sessions";
 
 // This route hits the database, so it must run on the Node.js runtime and never be
 // statically cached.
@@ -28,7 +30,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   // collect request. Without analytics consent we store nothing — the authoritative check,
   // independent of what the client claims in the body.
   const consent = parse(cookieFromHeader(req.headers.get("cookie"), CONSENT_COOKIE));
-  if (!isAnalyticsAllowed(consent)) {
+  if (!consent || !consent.a) {
     return NextResponse.json({ accepted: 0, rejected: 0, skipped: "consent" }, { status: 202 });
   }
 
@@ -48,15 +50,27 @@ export async function POST(req: Request): Promise<NextResponse> {
     );
   }
 
+  let accepted: number;
   try {
     await ensureIndexes();
-    const accepted = await insertEvents(result.events);
-    return NextResponse.json(
-      { accepted, rejected: result.rejected },
-      { status: 202 },
-    );
+    accepted = await insertEvents(result.events);
   } catch {
     // Don't leak internals to the tracker; the client will retry from its queue.
     return NextResponse.json({ error: "Could not store events." }, { status: 503 });
   }
+
+  // Best-effort session enrichment: coarse geo (derive-and-drop the IP) + current consent.
+  // Failures here must not undo a successful ingest, so they're swallowed.
+  try {
+    const purposes = { a: consent.a, l: consent.l, d: consent.d };
+    const sessionConsent = { tier: tierOf(purposes), version: consent.v, purposes };
+    const geo = await lookupGeo(clientIp(req.headers));
+    const now = new Date();
+    const ids = [...new Set(result.events.map((e) => e.sessionId))];
+    await Promise.all(ids.map((id) => upsertSession(id, { consent: sessionConsent, geo, now })));
+  } catch {
+    /* enrichment is best-effort */
+  }
+
+  return NextResponse.json({ accepted, rejected: result.rejected }, { status: 202 });
 }

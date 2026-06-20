@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getSessionEvents } from "@/lib/events";
+import { getSession } from "@/lib/sessions";
 import type { JourneyEvent } from "@/lib/types";
 import { formatDateTime, formatDuration, formatNumber } from "@/lib/format";
 import JourneyTimeline from "@/components/JourneyTimeline";
@@ -40,13 +41,18 @@ export default async function SessionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const events = await getSessionEvents(id);
+  const [events, session] = await Promise.all([getSessionEvents(id), getSession(id)]);
   if (events.length === 0) notFound();
 
   const s = summarize(events);
+  const location = session?.geo?.country
+    ? session.geo.country + (session.geo.region ? `-${session.geo.region}` : "")
+    : "Unknown";
   const stats: Array<[string, string]> = [
     ["Started", formatDateTime(s.startedAt)],
     ["Time on page", formatDuration(s.dwellMs)],
+    ["Location", location],
+    ["Consent", session?.consent?.tier ?? "—"],
     ["Pages", formatNumber(s.pages)],
     ["Events", formatNumber(s.events)],
     ["Clicks", formatNumber(s.clicks)],

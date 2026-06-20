@@ -8,6 +8,10 @@ vi.mock("@/lib/events", () => ({
   insertEvents: (events: unknown[]) => insertEvents(events),
   ensureIndexes: () => ensureIndexes(),
 }));
+// The route also enriches sessions (geo + session upsert); stub those so the test stays
+// isolated from the DB and the geo database.
+vi.mock("@/lib/sessions", () => ({ upsertSession: vi.fn(async () => {}) }));
+vi.mock("@/lib/geo", () => ({ lookupGeo: vi.fn(async () => null), clientIp: () => null }));
 
 import { POST } from "@/app/api/collect/route";
 
