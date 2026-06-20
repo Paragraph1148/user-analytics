@@ -10,7 +10,9 @@ import type {
   HeatmapPathInfo,
   HeatmapPoint,
   JourneyEvent,
+  ScrollBucket,
   SessionSummary,
+  TopElement,
 } from "./types";
 
 const COLLECTION = "events";
@@ -187,4 +189,49 @@ export async function listHeatmapPaths(): Promise<HeatmapPathInfo[]> {
     ])
     .toArray();
   return docs.map((d) => ({ path: d._id as string, clicks: d.clicks as number }));
+}
+
+// ---- Element-level + scroll analytics ----------------------------------------------
+
+/** Group plain clicks (not rage/dead, to avoid double counting) by element for one page. */
+export function topElementsPipeline(path: string, limit: number): Document[] {
+  return [
+    { $match: { path, type: "click" } },
+    {
+      $group: {
+        _id: { tag: { $ifNull: ["$meta.tag", ""] }, label: { $ifNull: ["$meta.label", ""] } },
+        clicks: { $sum: 1 },
+      },
+    },
+    { $sort: { clicks: -1 } },
+    { $limit: limit },
+  ];
+}
+
+export async function getTopElements(path: string, limit = 20): Promise<TopElement[]> {
+  const col = await eventsCollection();
+  const docs = await col.aggregate(topElementsPipeline(path, limit)).toArray();
+  return docs.map((d) => ({
+    tag: (d._id.tag as string) || "",
+    label: (d._id.label as string) || "",
+    clicks: d.clicks as number,
+  }));
+}
+
+/** Distinct sessions reaching each scroll-depth milestone on one page. */
+export function scrollDistributionPipeline(path: string): Document[] {
+  return [
+    { $match: { path, type: "scroll" } },
+    { $group: { _id: "$meta.depthPct", sessions: { $addToSet: "$sessionId" } } },
+    { $project: { _id: 0, depthPct: "$_id", sessions: { $size: "$sessions" } } },
+    { $sort: { depthPct: 1 } },
+  ];
+}
+
+export async function getScrollDistribution(path: string): Promise<ScrollBucket[]> {
+  const col = await eventsCollection();
+  const docs = await col.aggregate(scrollDistributionPipeline(path)).toArray();
+  return docs
+    .filter((d) => typeof d.depthPct === "number")
+    .map((d) => ({ depthPct: d.depthPct as number, sessions: d.sessions as number }));
 }

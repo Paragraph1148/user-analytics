@@ -59,6 +59,19 @@ export interface HeatmapPathInfo {
   clicks: number;
 }
 
+/** A clicked element, grouped for the "most-clicked elements" report. */
+export interface TopElement {
+  tag: string;
+  label: string;
+  clicks: number;
+}
+
+/** One scroll-depth milestone and how many sessions reached it. */
+export interface ScrollBucket {
+  depthPct: number;
+  sessions: number;
+}
+
 /**
  * A single analytics event as stored in MongoDB. `ts` is always assigned by the
  * server on ingest — we never trust the client clock. No field here is allowed to

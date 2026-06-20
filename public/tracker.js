@@ -262,6 +262,30 @@
     return !!(el && el.closest && el.closest(INTERACTIVE));
   }
 
+  // Describe the clicked element for "most-clicked elements" analytics. Labels are only read
+  // from actual controls (their data-track / aria-label / title / button text — site UI, not
+  // user-entered values), never from arbitrary page text. Non-interactive targets get a tag
+  // only.
+  function elementLabel(el) {
+    if (!el.getAttribute) return "";
+    var v = el.getAttribute("data-track") || el.getAttribute("aria-label") || el.getAttribute("title");
+    if (v) return v.replace(/\s+/g, " ").trim().slice(0, 80);
+    return (el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  }
+  function describeElement(target) {
+    var interactive = target && target.closest && target.closest(INTERACTIVE);
+    var el = interactive || target;
+    if (!el || !el.tagName) return { tag: "" };
+    var meta = { tag: String(el.tagName).toLowerCase() };
+    if (interactive) {
+      var role = el.getAttribute("role");
+      if (role) meta.role = String(role).slice(0, 40);
+      var label = elementLabel(el);
+      if (label) meta.label = label;
+    }
+    return meta;
+  }
+
   function scrollDepthPct() {
     var doc = document.documentElement;
     var top = window.pageYOffset || doc.scrollTop || 0;
@@ -274,17 +298,17 @@
   // ---- Capture handlers (named so they can be detached on consent withdrawal) ----
   function onClick(e) {
     var target = e.target;
-    var tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+    var meta = describeElement(target); // { tag, role?, label? } — element type + control label
     var x = Math.round(e.pageX);
     var y = Math.round(e.pageY);
     var vpW = window.innerWidth;
     var vpH = window.innerHeight;
     var now = Date.now();
 
-    enqueue("click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: { tag: tag } });
+    enqueue("click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: meta });
 
     if (isRageBurst(x, y, now)) {
-      enqueue("rage_click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: { tag: tag } });
+      enqueue("rage_click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: meta });
     }
 
     if (!isInteractive(target)) {
@@ -294,7 +318,7 @@
         var mutated = lastMutation >= now;
         var navigated = location.href !== hrefBefore;
         if (!mutated && !navigated) {
-          enqueue("dead_click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: { tag: tag } });
+          enqueue("dead_click", { x: x, y: y, vpW: vpW, vpH: vpH, meta: meta });
         }
       }, DEAD_DELAY);
     }

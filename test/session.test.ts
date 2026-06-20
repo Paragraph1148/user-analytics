@@ -3,7 +3,7 @@ import { CONSENT_COOKIE, makeState, PRESET_ALL, PRESET_NECESSARY, serialize, typ
 import { sanitizeDevice, roundPrecise } from "@/lib/sessions";
 
 // Keep sanitizeDevice/roundPrecise real; stub only the DB write.
-const updateSessionAttributes = vi.fn(async (..._args: unknown[]): Promise<boolean> => true);
+const updateSessionAttributes = vi.fn<(...args: unknown[]) => Promise<boolean>>();
 vi.mock("@/lib/sessions", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/sessions")>();
   return { ...actual, updateSessionAttributes: (...args: unknown[]) => updateSessionAttributes(...args) };

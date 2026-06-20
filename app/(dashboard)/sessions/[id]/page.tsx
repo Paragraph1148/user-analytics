@@ -24,6 +24,10 @@ function summarize(events: JourneyEvent[]) {
   const exit = events.find((e) => e.type === "page_exit");
   const dwellMs =
     exit && typeof exit.meta?.dwellMs === "number" ? exit.meta.dwellMs : end - start;
+  const depths = events
+    .filter((e) => e.type === "scroll" && typeof e.meta?.depthPct === "number")
+    .map((e) => e.meta!.depthPct as number);
+  if (exit && typeof exit.meta?.maxDepthPct === "number") depths.push(exit.meta.maxDepthPct);
   return {
     events: events.length,
     pages: new Set(events.filter((e) => e.type === "page_view").map((e) => e.path)).size,
@@ -32,6 +36,7 @@ function summarize(events: JourneyEvent[]) {
     dead: events.filter((e) => e.type === "dead_click").length,
     startedAt: events[0].ts,
     dwellMs,
+    maxDepth: depths.length ? Math.max(...depths) : 0,
   };
 }
 
@@ -78,6 +83,7 @@ export default async function SessionDetailPage({
     ["Consent", session?.consent?.tier ?? "—"],
     ["Pages", formatNumber(s.pages)],
     ["Events", formatNumber(s.events)],
+    ["Max scroll", `${s.maxDepth}%`],
     ["Clicks", formatNumber(s.clicks)],
     ["Rage", formatNumber(s.rage)],
     ["Dead", formatNumber(s.dead)],

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { sessionsPipeline, toSessionSummary } from "@/lib/events";
+import {
+  scrollDistributionPipeline,
+  sessionsPipeline,
+  toSessionSummary,
+  topElementsPipeline,
+} from "@/lib/events";
 
 describe("sessionsPipeline", () => {
   it("groups by sessionId with the expected accumulators", () => {
@@ -70,5 +75,26 @@ describe("toSessionSummary", () => {
     });
     expect(summary.geo).toEqual({ country: "US", region: "CA" });
     expect(summary.consentTier).toBe("all");
+  });
+});
+
+describe("topElementsPipeline", () => {
+  it("counts plain clicks per element (tag+label) for a path, most first", () => {
+    const stages = topElementsPipeline("/demo", 20) as Array<Record<string, unknown>>;
+    const match = stages.find((s) => "$match" in s)!.$match as { type: string; path: string };
+    expect(match.type).toBe("click"); // not rage/dead — avoids double counting
+    expect(match.path).toBe("/demo");
+    expect(stages.some((s) => s.$limit === 20)).toBe(true);
+    expect(stages.some((s) => JSON.stringify(s.$sort) === JSON.stringify({ clicks: -1 }))).toBe(true);
+  });
+});
+
+describe("scrollDistributionPipeline", () => {
+  it("counts distinct sessions per depth milestone for a path", () => {
+    const stages = scrollDistributionPipeline("/demo") as Array<Record<string, unknown>>;
+    const match = stages.find((s) => "$match" in s)!.$match as { type: string };
+    expect(match.type).toBe("scroll");
+    const group = stages.find((s) => "$group" in s)!.$group as { sessions: unknown };
+    expect(group.sessions).toEqual({ $addToSet: "$sessionId" }); // distinct sessions
   });
 });
