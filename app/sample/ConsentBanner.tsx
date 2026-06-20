@@ -97,6 +97,13 @@ export default function ConsentBanner() {
     setReopened(false);
   }
 
+  // Make a choice and collapse back to the pill (resetting reopened, so a re-opened banner
+  // hides again after saving).
+  function apply(p: Purposes) {
+    writeConsent(p);
+    close();
+  }
+
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-hairline bg-canvas/95 backdrop-blur">
       <div className="mx-auto max-w-3xl px-6 py-5">
@@ -148,17 +155,17 @@ export default function ConsentBanner() {
             <div className="mt-4 flex flex-wrap items-center gap-2">
               {managing ? (
                 <>
-                  <Btn primary onClick={() => writeConsent({ a: true, l: draft.l, d: draft.d })}>
+                  <Btn primary onClick={() => apply({ a: true, l: draft.l, d: draft.d })}>
                     Save choices
                   </Btn>
                   <Btn onClick={() => setManaging(false)}>Back</Btn>
                 </>
               ) : (
                 <>
-                  <Btn primary onClick={() => writeConsent(PRESET_ALL)}>
+                  <Btn primary onClick={() => apply(PRESET_ALL)}>
                     Allow all
                   </Btn>
-                  <Btn onClick={() => writeConsent(PRESET_NECESSARY)}>Necessary only</Btn>
+                  <Btn onClick={() => apply(PRESET_NECESSARY)}>Necessary only</Btn>
                   <Btn
                     onClick={() => {
                       setManaging(true);
@@ -167,12 +174,14 @@ export default function ConsentBanner() {
                   >
                     Manage
                   </Btn>
+                  {/* Re-opened with consent already set: let the user dismiss without changing. */}
+                  {consent && <Btn onClick={close}>Done</Btn>}
                 </>
               )}
               {consent && (
                 <button
                   type="button"
-                  onClick={() => writeConsent(PRESET_DENIED)}
+                  onClick={() => apply(PRESET_DENIED)}
                   className="ml-auto rounded-sm text-xs text-mute underline-offset-4 hover:text-signal-rage hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
                 >
                   Withdraw all
