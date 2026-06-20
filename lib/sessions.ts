@@ -165,6 +165,17 @@ export async function countSessions(): Promise<number> {
   return db.collection("sessions").estimatedDocumentCount();
 }
 
+/** Precise [lat, lng] points (consented precise_location) for the map's heat layer. */
+export async function getPrecisePoints(limit = 5000): Promise<Array<[number, number]>> {
+  const db = await getDb();
+  const docs = await db
+    .collection<SessionDoc>("sessions")
+    .find({ precise: { $exists: true } }, { projection: { _id: 0, precise: 1 } })
+    .limit(limit)
+    .toArray();
+  return docs.filter((d) => d.precise).map((d) => [d.precise!.lat, d.precise!.lng]);
+}
+
 /** Right to erasure: remove everything tied to a session — events, the session record, and
  *  its consent-log entries. Returns how many documents were deleted from each. */
 export async function deleteSessionData(

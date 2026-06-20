@@ -11,6 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "leaflet": "^1.9.4",
+    "leaflet.heat": "^0.2.0",
     "maxmind": "^5.0.6",
     "mongodb": "^7.3.0",
     "next": "16.2.9",
@@ -19,6 +21,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.21",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

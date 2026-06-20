@@ -23,11 +23,26 @@ function getReader(): Promise<Reader<CityResponse> | null> {
   return readerPromise;
 }
 
-/** First IP from the proxy chain (App Runner forwards the client IP in X-Forwarded-For). */
+// Loopback / unspecified addresses can't be geolocated (local dev sends these).
+function usableIp(ip: string | null | undefined): string | null {
+  const v = ip?.trim();
+  if (!v || v === "::1" || v === "::" || v === "127.0.0.1" || v.startsWith("::ffff:127.")) {
+    return null;
+  }
+  return v;
+}
+
+/** First usable IP from the proxy chain (App Runner forwards the client IP in
+ *  X-Forwarded-For). On localhost there's no forwarded public IP, so geo can't resolve; set
+ *  GEOIP_FALLBACK_IP in development to exercise the geo path locally. Never used in prod. */
 export function clientIp(headers: Headers): string | null {
   const xff = headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0].trim() || null;
-  return headers.get("x-real-ip");
+  const ip = usableIp(xff?.split(",")[0]) ?? usableIp(headers.get("x-real-ip"));
+  if (ip) return ip;
+  if (process.env.NODE_ENV !== "production" && process.env.GEOIP_FALLBACK_IP) {
+    return process.env.GEOIP_FALLBACK_IP;
+  }
+  return null;
 }
 
 /** Look up coarse geo for an IP. Returns null on any miss/error/missing DB. */
